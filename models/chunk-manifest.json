@@ -1,4 +1,5 @@
 {
-  "models/Xenova/opus-mt-zh-en/onnx/decoder_model_merged_int8.onnx": 3,
-  "models/Xenova/opus-mt-zh-en/onnx/encoder_model_int8.onnx": 3
+  "models/Xenova/opus-mt-zh-en/onnx/decoder_model_merged_int8.onnx": 15,
+  "models/Xenova/opus-mt-zh-en/onnx/encoder_model_int8.onnx": 13,
+  "models/Xenova/opus-mt-zh-en/tokenizer.json": 2
 }
