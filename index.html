@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f4b3a" />
+    <meta name="description" content="离线把中文译成英文，显示音标并按语速朗读" />
+    <title>中译英朗读</title>
+    <link rel="icon" href="/my-english/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/my-english/icon-192.png" />
+    <script type="module" crossorigin src="/my-english/assets/index-DfOf7iP5.js"></script>
+    <link rel="stylesheet" crossorigin href="/my-english/assets/index-lYU_OjMV.css">
+  <link rel="manifest" href="/my-english/manifest.webmanifest"></head>
+  <body>
+    <main class="app">
+      <header>
+        <h1>中译英朗读</h1>
+        <p class="lead">输入中文句子，离线译成英文，查看每个单词的音标，并整句朗读。没有朗读时，可以点单个单词看中文意思。</p>
+      </header>
+
+      <label class="field" for="source">中文</label>
+      <textarea id="source" rows="4" placeholder="例如：今天天气很好，我们去公园走走。">今天天气很好。</textarea>
+
+      <div class="row">
+        <button id="translate" type="button">翻译</button>
+        <p id="status" class="status" role="status">正在准备翻译模型…</p>
+      </div>
+
+      <section id="result" class="result" hidden>
+        <h2>英文</h2>
+        <div id="words" class="words"></div>
+        <div id="gloss" class="gloss">
+          <p id="gloss-word" class="gloss-word">点一个单词</p>
+          <p id="gloss-meaning">这里显示它的中文意思。</p>
+        </div>
+        <div class="speak-row">
+          <div class="speeds" role="group" aria-label="语速">
+            <button type="button" data-rate="1.25">快</button>
+            <button type="button" data-rate="1" aria-pressed="true">中</button>
+            <button type="button" data-rate="0.7">慢</button>
+            <button type="button" data-rate="0.45">超慢</button>
+            <button type="button" data-rate="0.25">更慢</button>
+            <button type="button" data-rate="0.1">最慢</button>
+          </div>
+          <button id="speak" type="button">朗读</button>
+          <button id="stop" type="button" class="ghost">停止</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

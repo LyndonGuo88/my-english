@@ -1,0 +1,1 @@
+{"name":"中译英朗读","short_name":"中译英","description":"离线把中文译成英文，显示音标并朗读","start_url":"/my-english/","display":"standalone","background_color":"#f4f1ea","theme_color":"#1f4b3a","lang":"zh-CN","scope":"/my-english/","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
