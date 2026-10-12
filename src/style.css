@@ -1,0 +1,167 @@
+:root {
+  color-scheme: light;
+  --ink: #1c2430;
+  --muted: #5c6775;
+  --paper: #f4f1ea;
+  --card: #fffdf8;
+  --line: #e2d9cc;
+  --green: #1f4b3a;
+  --green-pressed: #16382b;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.7rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.lead, .status {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.field {
+  display: block;
+  margin: 1.25rem 0 0.4rem;
+  font-weight: 650;
+}
+
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+  font: inherit;
+  background: var(--card);
+  resize: vertical;
+}
+
+.row, .speak-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.8rem;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.65rem 1.1rem;
+  font: inherit;
+  background: var(--green);
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+button:active:not(:disabled) { background: var(--green-pressed); }
+
+button.ghost, .speeds button {
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.speeds button {
+  padding: 0.5rem 0.7rem;
+}
+
+.speeds button[aria-pressed="true"] {
+  background: var(--green);
+  color: white;
+}
+
+.result {
+  margin-top: 1.4rem;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.35rem 0.15rem;
+  line-height: 1.2;
+}
+
+button.word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2.2rem;
+  margin-right: 0.35rem;
+  padding: 0.15rem 0.25rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+button.word[aria-pressed="true"],
+button.word:active:not(:disabled) {
+  background: #e7f0ea;
+}
+
+button.word:disabled {
+  opacity: 1;
+}
+
+.gloss {
+  min-height: 4.5rem;
+  margin-top: 1rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: #fbf8f2;
+}
+
+.gloss-word {
+  margin: 0;
+  font-weight: 700;
+}
+
+#gloss-meaning {
+  margin: 0.35rem 0 0;
+  line-height: 1.5;
+}
+
+.word b {
+  font-size: 1.2rem;
+  font-weight: 650;
+}
+
+.word span {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: "Lucida Sans Unicode", "Noto Sans", sans-serif;
+}
+
+.space { width: 0.35rem; }

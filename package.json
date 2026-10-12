@@ -1,0 +1,30 @@
+{
+  "name": "my-english",
+  "version": "1.0.0",
+  "description": "离线中译英、音标和朗读",
+  "type": "module",
+  "scripts": {
+    "fetch-assets": "node scripts/fetch-model.mjs",
+    "dev": "npm run fetch-assets && node node_modules/vite/bin/vite.js --host",
+    "dev:adb": "npm run fetch-assets && node scripts/dev-adb.mjs",
+    "build": "npm run fetch-assets && node node_modules/vite/bin/vite.js build",
+    "build:apk": "npm run fetch-assets && CAPACITOR_BUILD=1 node node_modules/vite/bin/vite.js build",
+    "preview": "vite preview --host",
+    "preview:adb": "node scripts/dev-adb.mjs --preview",
+    "apk": "npm run build:apk && node node_modules/@capacitor/cli/bin/capacitor sync android && node scripts/build-apk.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@huggingface/transformers": "^4.3.1",
+    "vite": "^8.3.3",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}
