@@ -71,13 +71,24 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
         runtimeCaching: [
           {
-            // 模型不随站点预缓存，首次由 transformers 从 hf-mirror 拉并写入浏览器缓存；
-            // 这里再给镜像侧一道 CacheFirst 保险（同源不会命中，不会与预缓存重复存）。
-            urlPattern: /^https:\/\/hf-mirror\.com\/.*/i,
+            // 模型大文件被切成 ≤4MB 的同源分片（.part0/.part1/…）；分片不变，用 CacheFirst。
+            // 缓存名带 -v2：一旦分片大小/数量变过，改名即可作废旧缓存，避免旧分片被误用。
+            urlPattern: /\.part\d+$/i,
             handler: "CacheFirst",
             options: {
-              cacheName: "translation-model",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheName: "translation-model-v2",
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // 分片清单必须总是最新（片数变过时用旧清单会拼出不完整的模型），
+            // 用 NetworkFirst：联网取新，只有离线时才回退到缓存。
+            urlPattern: /\/models\/chunk-manifest\.json$/i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "translation-model-v2",
+              networkTimeoutSeconds: 10,
               cacheableResponse: { statuses: [0, 200] },
             },
           },

@@ -44,8 +44,10 @@ export async function api(method, apiPath, body) {
     if (response.ok) return text ? JSON.parse(text) : null;
 
     const error = new ApiError(`${method} ${apiPath} -> ${response.status} ${text.slice(0, 200)}`, response.status);
-    // 4xx 是请求本身的问题，重试没有意义；只有 5xx 和限流才重试。
-    if (response.status < 500 && response.status !== 429) throw error;
+    // 400 malformed 常见于大请求体在链路中被截断，值得重试；
+    // 其余 4xx 是请求本身的问题，重试无意义；只有 5xx 和限流才重试。
+    const retryable = response.status >= 500 || response.status === 429 || response.status === 400;
+    if (!retryable) throw error;
     if (attempt === 3) throw error;
     const wait = attempt * 2000;
     console.warn(`服务端 ${response.status}，${wait}ms 后重试`);
@@ -100,13 +102,14 @@ export async function uploadEntries(entries, remoteTree, makeBase64) {
     const started = Date.now();
     const content = makeBase64(entry);
     const size = (Buffer.byteLength(content) / 1048576) * 0.75;
+    console.log(`  ↑ ${entry.path}（${size.toFixed(1)}MB）…`);
     const blob = await api("POST", `/repos/${repo}/git/blobs`, { content, encoding: "base64" });
     if (blob.sha !== entry.sha) {
       throw new Error(`${entry.path} 哈希不一致：本地 ${entry.sha} 远端 ${blob.sha}`);
     }
     uploaded += 1;
     bytes += size;
-    console.log(`  ↑ ${entry.path}（${size.toFixed(1)}MB，${((Date.now() - started) / 1000).toFixed(1)}s）`);
+    console.log(`    完成 ${((Date.now() - started) / 1000).toFixed(1)}s`);
   }
   console.log(`上传变化文件 ${uploaded} 个，共 ${bytes.toFixed(1)}MB`);
   return uploaded;

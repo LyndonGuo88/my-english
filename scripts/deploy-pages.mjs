@@ -42,8 +42,64 @@ if (!process.argv.includes("--skip-build")) {
 }
 if (!fs.existsSync(path.join(dist, "index.html"))) throw new Error("dist/index.html 不存在，先构建");
 
-// 2. 收集产物，用 git hash-object 算出与远端一致的 blob 哈希。
+// 2. 把 dist/models 下超过 CHUNK_SIZE 的大文件切成 .partN 写回磁盘，并生成分片清单。
+//   Data/Contents API 单文件上限约 25MB（实测 25.6MB 可过、50MB+ 报 422），翻译模型的
+//   onnx 有 50~57MB 推不上去；切好后 dist 布局与线上一致，可先本地 preview 验证再推送。
+//   片切得小（4MB）是为了适配 github.io 在国内的慢下载：单片几十秒内下完，
+//   不会撞上浏览器/SW 对单个 fetch 约 300s 的时长上限（详见 src/model-chunks.js）。
+//   只切 models/；ort/ 的 wasm（25.6MB）保持原名（onnxruntime 直接按名加载，不能改）。
+const CHUNK_SIZE = 4 * 1024 * 1024;
+
+function chunkDistOnDisk() {
+  const modelsDir = path.join(dist, "models");
+  if (!fs.existsSync(modelsDir)) return;
+  const big = [];
+  (function scan(dir) {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, item.name);
+      if (item.isDirectory()) scan(full);
+      else if (fs.statSync(full).size > CHUNK_SIZE) big.push(full);
+    }
+  })(modelsDir);
+  const manifest = {};
+  for (const full of big) {
+    const rel = path.relative(dist, full).split(path.sep).join("/");
+    const bytes = fs.readFileSync(full);
+    const parts = Math.ceil(bytes.length / CHUNK_SIZE);
+    manifest[rel] = parts;
+    for (let i = 0; i < parts; i += 1) {
+      fs.writeFileSync(`${full}.part${i}`, bytes.subarray(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, bytes.length)));
+    }
+    fs.rmSync(full);
+    console.log(`  ✂ ${rel}（${(bytes.length / 1048576).toFixed(1)}MB）→ ${parts} 片`);
+  }
+  if (Object.keys(manifest).length > 0) {
+    fs.writeFileSync(path.join(modelsDir, "chunk-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    console.log(`  清单 models/chunk-manifest.json：${JSON.stringify(manifest)}`);
+  }
+}
+
+chunkDistOnDisk();
+
+// --local：只构建+切片，不推送，供本地 vite preview 验证分片拼接是否可用。
+if (process.argv.includes("--local")) {
+  console.log(`\ndist 已按线上布局切好分片，本地验证（注意 preview 也要带 VITE_BASE）：`);
+  console.log(`  $env:VITE_BASE='${base}'; & ${node} node_modules/vite/bin/vite.js preview --port 4173`);
+  console.log(`  浏览器打开 http://localhost:4173${base}`);
+  process.exit(0);
+}
+
+// 3. 收集产物（dist 已切好分片），用 git hash-object 算出与远端一致的 blob 哈希。
 //   字节从标准输入喂给 git：磁盘产物和上传内容完全一致，不存在 CRLF 归一化差异。
+function hashBytes(bytes, label) {
+  const result = spawnSync(git, ["-C", root, "hash-object", "-w", "--stdin"], { input: bytes, encoding: "utf8" });
+  const sha = result.stdout?.trim();
+  if (result.status !== 0 || !/^[0-9a-f]{40}$/.test(sha || "")) {
+    throw new Error(`计算哈希失败 ${label}：${result.stderr || result.stdout}`);
+  }
+  return sha;
+}
+
 const files = [];
 (function walk(dir) {
   for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -53,46 +109,37 @@ const files = [];
   }
 })(dist);
 
-// 107MB 模型不随站点推送（Data API 拒绝大 blob），由浏览器首次从 hf-mirror 拉。
-// dist/models 仍然会构建时拷进来，但这里不上传它。
-const entries = files
-  .filter((full) => !path.relative(dist, full).split(path.sep).join("/").startsWith("models/"))
-  .map((full) => {
-    const rel = path.relative(dist, full).split(path.sep).join("/");
-    const bytes = fs.readFileSync(full);
-    const result = spawnSync(git, ["-C", root, "hash-object", "-w", "--stdin"], { input: bytes, encoding: "utf8" });
-    const sha = result.stdout?.trim();
-    if (result.status !== 0 || !/^[0-9a-f]{40}$/.test(sha || "")) {
-      throw new Error(`计算哈希失败 ${rel}：${result.stderr || result.stdout}`);
-    }
-    return { path: rel, mode: "100644", sha, size: bytes.length };
-  });
+const entries = files.map((full) => {
+  const rel = path.relative(dist, full).split(path.sep).join("/");
+  const bytes = fs.readFileSync(full);
+  return { path: rel, mode: "100644", sha: hashBytes(bytes, rel), size: bytes.length, content: () => bytes.toString("base64") };
+});
 const total = entries.reduce((sum, entry) => sum + entry.size, 0);
 console.log(`产物 ${entries.length} 个文件，共 ${(total / 1048576).toFixed(1)}MB`);
 
-// 3. 只上传内容变过的文件（模型命中远端就跳过），再整体替换 gh-pages 树
+// 4. 只上传内容变过的文件（命中远端就跳过），再整体替换 gh-pages 树
 const currentRef = await readRef(branch);
 const parent = currentRef?.object.sha || null;
 const remoteTree = await readRemoteTree(parent);
 console.log(parent ? `gh-pages 现有提交 ${parent.slice(0, 7)}，比对差异…` : "gh-pages 分支不存在，首次全量推送…");
-await uploadEntries(entries, remoteTree, (entry) => fs.readFileSync(path.join(dist, entry.path)).toString("base64"));
+await uploadEntries(entries, remoteTree, (entry) => entry.content());
 
 const message = process.env.GH_MESSAGE || `deploy: 发布网页版（${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC）`;
 const sha = await commitTree(branch, entries, { parent, message });
 console.log(`已推送产物 ${sha.slice(0, 7)} 到 ${branch}`);
 
-// 4. 把 Pages 指向 gh-pages 根目录（repo 权限即可，不需要 workflow）
+// 5. 把 Pages 指向 gh-pages 根目录（repo 权限即可，不需要 workflow）
 for (const method of ["POST", "PUT"]) {
   try {
     const site = await api(method, `/repos/${repo}/pages`, { source: { branch, path: "/" } });
-    console.log(`Pages 已设置（${method}）：${site.html_url} 状态 ${site.status}`);
+    console.log(site ? `Pages 已设置（${method}）：${site.html_url} 状态 ${site.status}` : `Pages 已设置（${method}，无返回体）`);
     break;
   } catch (error) {
     console.log(`${method} 设置 Pages：${error.status === 409 ? "已存在，改用另一种方法" : error.message}`);
   }
 }
 
-// 5. 等站点上线并抽查关键资源
+// 6. 等站点上线并抽查关键资源
 for (let attempt = 1; attempt <= 18; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 10000));
   try {

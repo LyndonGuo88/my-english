@@ -1,23 +1,26 @@
 import { Capacitor } from "@capacitor/core";
 import { env, pipeline } from "@huggingface/transformers";
+import { patchedFetch } from "./model-chunks.js";
 
 // 部署到子路径（例如 GitHub Pages 的 /仓库名/）时，素材路径要跟着 base 走。
 const BASE_URL = import.meta.env.BASE_URL;
-// 网页版不将 107MB 模型随站点分发（本机上传不走），而是首次从国内镜像 huggingface 拉取，
-// 拉下后由浏览器 Cache API 缓存，之后可离线。APK 仍用内置本地模型。
-const MODEL_HOST = "https://hf-mirror.com/";
+// 翻译模型（约 113MB）随站点同源分发：超过 API 单文件上限的大文件在部署时被
+// 切成 ≤4MB 的分片，由 src/model-chunks.js 拦截 fetch 拼回完整模型。同源无 CORS 问题。
 const native = Capacitor.isNativePlatform();
 
-env.allowRemoteModels = !native;
-env.allowLocalModels = native;
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
+env.localModelPath = `${BASE_URL}models/`;
+// transformers 内部用自己的 env.fetch（而非 globalThis.fetch），这里显式指向分片拼接补丁，
+// 保证大模型请求会被拦截、从同源分片拼回。不依赖模块加载顺序。
+env.fetch = patchedFetch;
 if (native) {
-  env.localModelPath = `${BASE_URL}models/`;
+  // APK 内模型是完整文件（构建期已放好），无需浏览器缓存/WASM 缓存。
   env.useBrowserCache = false;
   env.useWasmCache = false;
   env.useCustomCache = false;
 } else {
-  // 远程模型走镜像；useBrowserCache 把模型文件存进 Cache API，下次/断网直接读缓存。
-  env.remoteHost = MODEL_HOST;
+  // web 端首次拼接后把模型存进浏览器 Cache API，下次/断网直接读缓存。
   env.useBrowserCache = true;
 }
 

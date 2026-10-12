@@ -37,6 +37,42 @@ Android 模型文件为 int8 版本：
 - `onnx/encoder_model_int8.onnx`，约 50MB
 - `onnx/decoder_model_merged_int8.onnx`，约 57MB
 
+## 网页版部署（GitHub Pages）
+
+网页版免费托管在 GitHub Pages，iPad/手机浏览器直接打开即用，不依赖电脑：
+
+**线上地址**：https://lyndonguo88.github.io/my-english/
+
+部署方式是**本机构建 + 用 token 走 GitHub API 推 `gh-pages` 分支**（不用 GitHub Actions：本机网络到 github.com 的 git 推送不通，且 token 只有 `repo` 权限、没有 `workflow` 权限）。全部逻辑在 `scripts/deploy-pages.mjs`：
+
+```powershell
+$env:GH_TOKEN="ghp_xxx"; $env:NODE_BIN="tools/node/node.exe"; $env:GIT_BIN="tools/git/cmd/git.exe"
+node scripts/deploy-pages.mjs               # 构建 + 切片 + 推送 + 开启 Pages + 验证
+node scripts/deploy-pages.mjs --local       # 只构建+切片，供本地 vite preview 验证
+node scripts/deploy-pages.mjs --skip-build  # 复用现有 dist 直接推送
+node scripts/deploy-pages.mjs --status      # 查看 Pages 和分支状态
+```
+
+源码同步到 `main` 分支用 `scripts/sync-github.mjs`（同样走 API）。两个脚本共用 `scripts/gh-lib.mjs`（GitHub Git Data API 封装）。`scripts/verify-live.mjs` 可从公网侧复核分片完整性与 SW 配置。
+
+子路径部署：Pages 项目站点挂在 `/仓库名/` 下，构建时由 `VITE_BASE=/my-english/` 注入 `vite.config.js` 的 `base`，运行时素材路径统一用 `import.meta.env.BASE_URL` 拼接。
+
+### 模型为什么要切片
+
+翻译模型共 113MB（encoder 50MB + decoder 57MB），但：
+
+- GitHub 的 Data/Contents API 单文件上限约 25MB，整份模型推不上去；
+- 本机到 github.com 的 `git push` 不通，没法用 Git LFS 或普通推送；
+- 国内镜像 `hf-mirror.com` 虽然快，但浏览器跨域拉模型会被 CORS 挡（`net::ERR_FAILED`）。
+
+所以部署脚本把 `models/` 下超过 4MB 的文件切成 ≤4MB 的分片（`xxx.onnx.part0/1/…`）分别推送，并生成 `models/chunk-manifest.json` 记录每个文件的分片数。运行时 `src/model-chunks.js` 给 `fetch` 打补丁：命中清单里的模型文件时，改为**串行**逐片从同源下载、在内存拼成完整 Blob 再返回，对 transformers.js 透明（transformers 内部用自己的 `env.fetch`，所以 `translate.js` 里显式把补丁赋给 `env.fetch`）。
+
+切小片 + 串行 + 每片重试，是为了适配 github.io 在国内的慢下载：单片几十秒内下完，不会撞上浏览器/Service Worker 对单个 fetch 约 300s 的时长上限；拼好的模型按 URL 去重，避免 transformers 对 seq2seq 模型重复请求导致流量翻倍。
+
+首次打开需联网下载约 113MB 模型（视网速约几分钟，状态栏会显示“正在下载模型 xxx（分片 i/N）”），之后由 transformers 的浏览器缓存 + Service Worker 缓存，可断网使用。若之前访问过旧版本，第一次可能需要硬刷新（Ctrl+Shift+R）让新 Service Worker 接管。
+
+> ⚠️ 部署用的 token 有仓库写权限，部署完成后应到 GitHub 设置里撤销或更换，避免泄露。
+
 ## 当前 Linux 电脑上的工具
 
 - Node v24、npm 11。`npm install` 走 `https://registry.npmmirror.com`，官方源会卡住

@@ -1,3 +1,5 @@
+// 必须在任何会发起模型请求的模块（translate.js）之前执行，安装分片拼接的 fetch 补丁。
+import { setChunkProgressHandler } from "./model-chunks.js";
 import { Capacitor } from "@capacitor/core";
 import { registerSW } from "virtual:pwa-register";
 import { prepareNativeRuntime } from "./native-runtime.js";
@@ -104,6 +106,23 @@ function onProgress(event) {
     setStatus(`正在加载${event.file.split("/").pop()}… ${Math.round(event.progress)}%`);
   }
 }
+
+// 分片下载进度（transformers 拿不到，由 model-chunks.js 单独回报），节流后更新状态栏，
+// 避免长时间下载时卡在旧文案、看着像死机。
+let lastChunkKey = "";
+setChunkProgressHandler(({ file, index, count, loaded, total, done }) => {
+  if (done) {
+    setStatus(`模型 ${file} 已下载，正在初始化…`);
+    lastChunkKey = "";
+    return;
+  }
+  const pct = total ? Math.floor((loaded / total) * 10) * 10 : null;
+  const key = `${file}:${index}:${pct}`;
+  if (key === lastChunkKey) return;
+  lastChunkKey = key;
+  const suffix = pct === null ? "" : `，本片 ${pct}%`;
+  setStatus(`正在下载模型 ${file}（分片 ${index + 1}/${count}${suffix}）…`);
+});
 
 const BASE_URL = import.meta.env.BASE_URL;
 

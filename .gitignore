@@ -1,9 +1,9 @@
 node_modules/
 dist/
 
-# 模型、词典、onnxruntime 运行时都是构建产物依赖，不进仓库；
-# 由 GitHub Actions 在 runner 上跑 npm run build 时通过 fetch-assets 下载，
-# 下载后进入 dist，浏览器从站点同源拿到。
+# 模型、词典、onnxruntime 运行时都是大体积构建输入，不进仓库（由 scripts/fetch-model.mjs 等拉到本地）。
+# 本机构建时（scripts/deploy-pages.mjs）vite 把它们从 public/ 拷进 dist，其中超过 4MB 的模型
+# 文件会被切成分片推到 gh-pages，浏览器从站点同源逐片拉取并拼回（详见 src/model-chunks.js）。
 public/models/
 public/dict/ipa.json
 public/dict/zh.json
@@ -25,7 +25,7 @@ my-english.zip
 # 测试产生的临时截图
 test-screenshot-*.png
 
-# 部署探测用的临时脚本
+# 部署探测用的临时脚本（一次性诊断，不进仓库）
 scripts/check-*.mjs
 scripts/check-*.ps1
 scripts/diag-*.mjs
