@@ -106,39 +106,23 @@ function onProgress(event) {
 }
 
 const BASE_URL = import.meta.env.BASE_URL;
-const LOCAL_FILES = [
-  "dict/ipa.json",
-  "models/Xenova/opus-mt-zh-en/config.json",
-  "models/Xenova/opus-mt-zh-en/generation_config.json",
-  "models/Xenova/opus-mt-zh-en/tokenizer.json",
-  "models/Xenova/opus-mt-zh-en/tokenizer_config.json",
-  "models/Xenova/opus-mt-zh-en/onnx/encoder_model_int8.onnx",
-  "models/Xenova/opus-mt-zh-en/onnx/decoder_model_merged_int8.onnx",
-].map((file) => `${BASE_URL}${file}`);
 
-async function cacheLocalFiles() {
+async function registerServiceWorker() {
   if (Capacitor.isNativePlatform()) {
-    // APK 里已有模型文件，不要再把上百 MB 模型读进网页内存。
+    // APK 不需要 Service Worker，模型已在包内。
     return;
   }
   registerSW({ immediate: true });
   if (!navigator.serviceWorker) {
     // 用局域网 IP 走 HTTP 访问时不是安全上下文，没有 Service Worker，
-    // 预下载上百 MB 也没地方缓存，交给翻译器按需加载就行。
+    // 交给翻译器按需从镜像拉模型就行。
     setStatus("正在加载翻译模型，第一次会久一些…");
     return;
   }
-  setStatus("正在缓存翻译模型，第一次会久一些…");
+  // 模型不再随站点预取（改为首次从镜像拉，由 transformers 缓存）；
+  // 只等 SW 就绪，页面自身和词典/运行时由 SW 预缓存。
+  setStatus("正在准备，第一次加载模型会久一些…");
   await navigator.serviceWorker.ready;
-  await Promise.all(LOCAL_FILES.map(async (url) => {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("本地素材加载失败");
-    const reader = response.body?.getReader();
-    if (!reader) return;
-    while (!(await reader.read()).done) {
-      // Drain the body so the service worker can finish caching it.
-    }
-  }));
 }
 
 let voiceError = "";
@@ -148,7 +132,7 @@ prepareVoices().catch((error) => {
 });
 
 prepareNativeRuntime()
-  .then(() => cacheLocalFiles())
+  .then(() => registerServiceWorker())
   .then(() => Promise.all([loadDictionary(), loadGloss()]))
   .then(() => loadTranslator(onProgress))
   .then(() => {

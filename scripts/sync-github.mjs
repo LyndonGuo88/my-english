@@ -69,16 +69,16 @@ const message = process.env.GH_MESSAGE
 const sha = await commitTree(branch, entries, { parent, message });
 console.log(`已推送提交 ${sha.slice(0, 7)} 到 ${branch}`);
 
-// 4. 工作流文件必须走 Contents API（需要 token 带 workflow 权限），叠在上一个提交之上
+// 4. 工作流文件必须走 Contents API（需要 token 带 workflow 权限），叠在上一个提交之上。
+//   当前采用本机构建部署，不用 Actions，无 workflow 权限时只告警不中断。
 for (const entry of workflows) {
   if (remoteTree.get(entry.path) === entry.sha) continue;
   try {
     await pushFileViaContents(entry.path, blobBase64(entry), "chore: 更新 Pages 工作流", remoteTree.get(entry.path));
     console.log(`已用 Contents API 写入 ${entry.path}`);
   } catch (error) {
-    console.error(`写入工作流 ${entry.path} 失败：${error.message}`);
-    console.error("→ 这个 token 没有 workflow 权限。需在 github.com → Settings → Developer settings → Tokens 勾选 workflow 重新生成（github.com 本机不可达，可用手机或其他网络操作）。");
-    throw error;
+    console.warn(`跳过工作流 ${entry.path}：${error.message}`);
+    console.warn("→ 不影响本机构建部署（deploy-pages.mjs）。若要改用 Actions，需把 token 加上 workflow 权限。");
   }
 }
 console.log("提示：远端提交对象不在本地对象库里，所以不动本地分支指针，每次同步都以工作区为准。");

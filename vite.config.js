@@ -71,7 +71,9 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 30 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: /\/models\/.*/i,
+            // 模型不随站点预缓存，首次由 transformers 从 hf-mirror 拉并写入浏览器缓存；
+            // 这里再给镜像侧一道 CacheFirst 保险（同源不会命中，不会与预缓存重复存）。
+            urlPattern: /^https:\/\/hf-mirror\.com\/.*/i,
             handler: "CacheFirst",
             options: {
               cacheName: "translation-model",
