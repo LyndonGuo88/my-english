@@ -73,6 +73,40 @@ node scripts/deploy-pages.mjs --status      # 查看 Pages 和分支状态
 
 > ⚠️ 部署用的 token 有仓库写权限，部署完成后应到 GitHub 设置里撤销或更换，避免泄露。
 
+### 常用命令（npm 脚本）
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run fetch-assets` | 下载模型、音标词典、ECDICT 到 `public/`（由 `scripts/fetch-model.mjs` 完成） |
+| `npm run dev` | 先 fetch-assets 再起 Vite 开发服务器（`--host`，手机可经局域网访问） |
+| `npm run build` | fetch-assets + 网页生产构建到 `dist/`（根路径，本地预览用） |
+| `npm run preview` | 起 `vite preview --host` 验证 `dist/` |
+| `npm run apk` | 打 Android debug APK 并 `adb install`（见下文） |
+| 网页上线 | `node scripts/deploy-pages.mjs`（构建 + 切片 + 推 `gh-pages`，见上） |
+
+### Windows 本机的便携工具
+
+网页部署改动在 Windows 上完成。本机没有全局 Node/Git，用仓库内的便携版（都在 `.gitignore` 里、不进仓库）：
+
+- Node：`tools\node\node.exe`（便携版）；Git：`tools\git\cmd\git.exe`（MinGit）
+- 部署脚本靠环境变量找到它们：`$env:NODE_BIN="tools/node/node.exe"; $env:GIT_BIN="tools/git/cmd/git.exe"`
+- `.git/config` 来自 Linux（`filemode=true`），跑 git 命令统一加 `-c core.filemode=false`，避免整仓误报修改
+- PowerShell 不支持 `&&` 作语句分隔符，多条命令用 `;`
+
+### 改模型 / 改分片时的同步清单
+
+分片机制有几处强耦合，改一处必须同步改其余，否则线上模型会损坏或流量翻倍：
+
+- `scripts/deploy-pages.mjs` 的 `CHUNK_SIZE` 与 `src/model-chunks.js` 的运行时拼接是同一约定的两侧：只改切片大小不改拼接，`chunk-manifest.json` 记录的分片数会和实际文件对不上。
+- 换了分片粒度或数量，必须把 `vite.config.js` 里 workbox 的 `cacheName`（现为 `translation-model-v2`）**升一个版本名**作废旧缓存；`chunk-manifest.json` 的策略要保持 `NetworkFirst`，否则旧缓存里的清单会让运行时只下到部分分片、拼出不完整模型。
+- `translate.js` 里 `env.fetch = patchedFetch` 不能省：transformers.js 在模块加载时就把当时的 `globalThis.fetch` 绑成了自己的 `env.fetch`，只覆盖 `globalThis.fetch` 是否生效取决于打包求值顺序，必须显式赋值。
+- 拼好的 Blob 按 URL 去重不能省：seq2seq 模型会对同一文件发起两次取回，不去重首次流量会从 113MB 翻到 226MB。
+
+### 上线前本地验证 / 上线后复核
+
+- 上线前：`node scripts/deploy-pages.mjs --local` 只构建 + 切片写回 `dist/`，再起 `npm run preview` 在浏览器验证分片拼接、翻译、进度与去重（Network 面板里每片应恰好请求一次）。
+- 上线后：`node scripts/verify-live.mjs` 从公网侧复核——所有分片在线、样本字节与本地一致、`sw.js` 缓存策略正确、`index.html` 引用的 JS bundle 与本地构建一致。**判定“新版是否生效”要看这个 bundle 哈希，而不是只看 `index.html` 是否 200**，因为 Pages 有 1–3 分钟 CDN 传播延迟。脚本里 `base` 和样本路径是写死的，换仓库名或改分片后要相应更新，且要先跑过 deploy（依赖 `dist/models/chunk-manifest.json`）。
+
 ## 当前 Linux 电脑上的工具
 
 - Node v24、npm 11。`npm install` 走 `https://registry.npmmirror.com`，官方源会卡住
